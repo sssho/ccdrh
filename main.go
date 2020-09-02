@@ -4,11 +4,25 @@
 package main
 
 import (
+	"flag"
 	"os"
 
 	ccdrh "github.com/sssho/ccdrh/src"
 )
 
+type flagVar struct {
+	cacheFile string
+}
+
+func parseFlags() *flagVar {
+	var flags flagVar
+	flag.StringVar(&flags.cacheFile, "f", "", "Path to cdr history file")
+	flag.Parse()
+
+	return &flags
+}
+
 func main() {
-	os.Exit(ccdrh.Run())
+	flags := parseFlags()
+	os.Exit(ccdrh.Run(flags.cacheFile))
 }
