@@ -33,39 +33,14 @@ func existingDirectory(r io.Reader) io.Reader {
 	return &buffer
 }
 
-func backupCachefile(cacheFile string, backupFile string) error {
-	src, err := os.Open(cacheFile)
-	if err != nil {
-		return err
-	}
-	defer src.Close()
-
-	dst, err := os.Create(backupFile)
-	if err != nil {
-		return err
-	}
-	defer dst.Close()
-
-	_, err = io.Copy(dst, src)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func updateCachefile(cacheFile string) error {
-	backupFile := cacheFile + ".bkup"
-	err := backupCachefile(cacheFile, backupFile)
-	if err != nil {
-		return err
-	}
-
-	ifile, err := os.Open(backupFile)
+	ifile, err := os.Open(cacheFile)
 	if err != nil {
 		return err
 	}
 	defer ifile.Close()
+	validDirs := existingDirectory(ifile)
+	ifile.Close()
 
 	// Overwrite cacheFile
 	ofile, err := os.Create(cacheFile)
@@ -74,12 +49,10 @@ func updateCachefile(cacheFile string) error {
 	}
 	defer ofile.Close()
 
-	validDirs := existingDirectory(ifile)
 	_, err = io.Copy(ofile, validDirs)
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
