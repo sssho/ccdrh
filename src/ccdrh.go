@@ -2,9 +2,9 @@ package ccdrh
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,23 +23,17 @@ func (e *errorString) Error() string {
 	return e.s
 }
 
-func existingDirectory(r io.Reader) io.Reader {
-	var buffer bytes.Buffer
-	scanner := bufio.NewScanner(r)
-
-	for scanner.Scan() {
-		dir := strings.Trim(scanner.Text()[1:], "'")
-		fineinfo, err := os.Stat(dir)
-		if err != nil {
-			continue
-		}
-
-		if fineinfo.IsDir() {
-			buffer.WriteString(scanner.Text() + "\n")
-		}
+func exists(cdrtext string) bool {
+	dir := strings.Trim(cdrtext[1:], "'")
+	fineinfo, err := os.Stat(dir)
+	if err != nil {
+		return false
 	}
 
-	return &buffer
+	if !fineinfo.IsDir() {
+		return false
+	}
+	return true
 }
 
 func updateCachefile(cacheFile string) error {
@@ -48,18 +42,57 @@ func updateCachefile(cacheFile string) error {
 		return err
 	}
 	defer ifile.Close()
-	validDirs := existingDirectory(ifile)
+
+	pr, pw := io.Pipe()
+
+	go func() {
+		defer pw.Close()
+
+		scanner := bufio.NewScanner(ifile)
+
+		for scanner.Scan() {
+			if exists(scanner.Text()) {
+				io.WriteString(pw, scanner.Text()+"\n")
+			}
+		}
+	}()
+
+	tmpfile, err := ioutil.TempFile("", "ccdrh")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmpfile.Name())
+
+	if _, err := io.Copy(tmpfile, pr); err != nil {
+		return err
+	}
 	ifile.Close()
+	if err := tmpfile.Close(); err != nil {
+		return err
+	}
 
 	// Overwrite cacheFile
-	ofile, err := os.Create(cacheFile)
+	// Use io.Copy to avoid cross-device link error
+	if err := renameFile(tmpfile.Name(), cacheFile); err != nil {
+		return err
+	}
+	return nil
+}
+
+func renameFile(in string, out string) error {
+	ifile, err := os.Open(in)
+	if err != nil {
+		return err
+	}
+	defer ifile.Close()
+
+	ofile, err := os.Create(out)
 	if err != nil {
 		return err
 	}
 	defer ofile.Close()
 
-	_, err = io.Copy(ofile, validDirs)
-	if err != nil {
+	if _, err := io.Copy(ofile, ifile); err != nil {
 		return err
 	}
 	return nil
